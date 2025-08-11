@@ -16,8 +16,8 @@ Environment variables:
 
   NTFY_URL       – Base URL of your ntfy server (defaults to https://ntfy.sh).
   NTFY_TOPIC     – Topic to subscribe to for alerts (defaults to "alerts").
-  NTFY_AUTH      – Optional Basic auth credentials for ntfy (format: user:pass).
-
+  NTFY_AUTH      – Optional Basic auth credentials for ntfy (format: user:pass)
+  
   EXTENSION      – Extension to ring on the PBX (defaults to "1000").
   CALLERID       – Caller ID presented on the ringing phone.
 
@@ -56,6 +56,7 @@ import aiohttp
 NTFY_URL = os.getenv("NTFY_URL", "https://ntfy.sh")
 NTFY_TOPIC = os.getenv("NTFY_TOPIC", "alerts")
 NTFY_AUTH = os.getenv("NTFY_AUTH", "")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL", "")
 
 EXTENSION = os.getenv("EXTENSION", "1000")
 CALLERID = os.getenv("CALLERID", "NTFY Bridge <7777>")
@@ -176,6 +177,19 @@ async def subscribe_ntfy() -> None:
                     continue
                 await handle_ntfy_msg(msg)
 
+
+async def send_webhook(msg: dict) -> None:
+    """Send the ntfy message to a webhook if WEBHOOK_URL is set."""
+    if not WEBHOOK_URL:
+        return
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(WEBHOOK_URL, json=msg) as resp:
+                resp.raise_for_status()
+                logging.info(f"Webhook notification sent: {resp.status}")
+    except Exception as exc:
+        logging.exception(f"Webhook send failed: {exc}")
+
 async def handle_ntfy_msg(msg: dict) -> None:
     prio = int(msg.get("priority", 3))
     title = msg.get("title", "")
@@ -183,6 +197,7 @@ async def handle_ntfy_msg(msg: dict) -> None:
     logging.info(f"ntfy message: priority={prio} title={title!r} message={body!r}")
     if prio >= 4:
         logging.info("High priority detected; placing SIP call to line 0...")
+          await send_webhook(msg)
         ami = AMIClient(AMI_HOST, AMI_PORT, AMI_USER, AMI_PASS)
         try:
             ami.connect()
