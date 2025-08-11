@@ -23,7 +23,7 @@ jobs:
           pytest -q
       - name: Build Docker image
         run: |
-          docker build -t ghcr.io/${{ github.repository_owner }}/sip-bridge:${{ github.sha }} .
+          docker build -t ghcr.io/maxwelldps/sip-bridge:${{ github.sha }} .
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -36,7 +36,7 @@ jobs:
           context: .
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/sip-bridge:${{ github.sha }}
-            ghcr.io/${{ github.repository_owner }}/sip-bridge:latest
+            ghcr.io/maxwelldps/sip-bridge:${{ github.sha }}
+            ghcr.io/maxwelldps/sip-bridge:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
