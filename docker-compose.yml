@@ -1,0 +1,21 @@
+version: "3.9"
+services:
+  ntfy-to-sip:
+    build: .
+    restart: unless-stopped
+    environment:
+      NTFY_URL: "https://ntfy.sh"
+      NTFY_TOPIC: "my-alerts"
+      # NTFY_AUTH: "user:pass"
+      AMI_HOST: "192.168.1.50"
+      AMI_PORT: "5038"
+      AMI_USER: "ntfybridge"
+      AMI_PASS: "SuperSecretPassword"
+      EXTENSION: "1000"
+      CHANNEL_TECH: "PJSIP"
+      DIAL_STRING: "PJSIP/1000"
+      CONTEXT: "from-internal"
+      PRIORITY: "1"
+      CALLERID: "NTFY Bridge <7777>"
+      TIMEOUT_MS: "30000"
+      LOG_LEVEL: "INFO"
