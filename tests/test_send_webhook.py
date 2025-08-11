@@ -5,7 +5,14 @@ import socket
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import importlib
-import ntfy_to_sip
+#import ntfy_to_sip
+import sys
+from pathlib import Path
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+    import ntfy_to_sip
+
 
 def run_test_server(port):
     class Handler(BaseHTTPRequestHandler):
