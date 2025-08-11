@@ -16,8 +16,15 @@ Environment variables:
 
   NTFY_URL       – Base URL of your ntfy server (defaults to https://ntfy.sh).
   NTFY_TOPIC     – Topic to subscribe to for alerts (defaults to "alerts").
-  NTFY_AUTH      – Optional Basic auth credentials for ntfy (format: user:pass)
-  
+  NTFY_AUTH      – Optional Basic auth credentials for ntfy (format: user:pass).
+
+  WEBHOOK_HOST   – Optional hostname for an HTTP webhook. Combined with
+                   WEBHOOK_PORT and WEBHOOK_PATH this forms the URL
+                   http://<WEBHOOK_HOST>:<WEBHOOK_PORT><WEBHOOK_PATH> for high‑priority ntfy messages.
+  WEBHOOK_PORT   – Optional port number for the webhook endpoint.
+  WEBHOOK_PATH   – Optional path for the webhook endpoint (including leading slash),
+                   e.g. "/hook". All three must be set for the webhook to be invoked.
+
   EXTENSION      – Extension to ring on the PBX (defaults to "1000").
   CALLERID       – Caller ID presented on the ringing phone.
 
@@ -56,7 +63,13 @@ import aiohttp
 NTFY_URL = os.getenv("NTFY_URL", "https://ntfy.sh")
 NTFY_TOPIC = os.getenv("NTFY_TOPIC", "alerts")
 NTFY_AUTH = os.getenv("NTFY_AUTH", "")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL", "")
+
+# Optional HTTP webhook components for external notifications. If all are set,
+# the bridge will POST the full ntfy message as JSON to:
+#   http://WEBHOOK_HOST:WEBHOOK_PORTWEBHOOK_PATH
+WEBHOOK_HOST = os.getenv("WEBHOOK_HOST", "")
+WEBHOOK_PORT = os.getenv("WEBHOOK_PORT", "")
+WEBHOOK_PATH = os.getenv("WEBHOOK_PATH", "")
 
 EXTENSION = os.getenv("EXTENSION", "1000")
 CALLERID = os.getenv("CALLERID", "NTFY Bridge <7777>")
@@ -177,17 +190,22 @@ async def subscribe_ntfy() -> None:
                     continue
                 await handle_ntfy_msg(msg)
 
-
 async def send_webhook(msg: dict) -> None:
-    """Send the ntfy message to a webhook if WEBHOOK_URL is set."""
-    if not WEBHOOK_URL:
+    """
+    Send the ntfy message to a configured HTTP endpoint if WEBHOOK_HOST, WEBHOOK_PORT and WEBHOOK_PATH are set.
+    The message payload is POSTed to http://WEBHOOK_HOST:WEBHOOK_PORTWEBHOOK_PATH as JSON.
+    """
+    # Do nothing unless all three components are provided
+    if not (WEBHOOK_HOST and WEBHOOK_PORT and WEBHOOK_PATH):
         return
+    url = f"http://{WEBHOOK_HOST}:{WEBHOOK_PORT}{WEBHOOK_PATH}"
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.post(WEBHOOK_URL, json=msg) as resp:
-                resp.raise_for_status()
-                logging.info(f"Webhook notification sent: {resp.status}")
+            # Use a short timeout for the webhook call to avoid blocking the ntfy loop.
+            await session.post(url, json=msg, timeout=10)
+            logging.info("Webhook notification sent")
     except Exception as exc:
+        # Log and ignore webhook errors; they should not disrupt SIP calling.
         logging.exception(f"Webhook send failed: {exc}")
 
 async def handle_ntfy_msg(msg: dict) -> None:
@@ -196,8 +214,9 @@ async def handle_ntfy_msg(msg: dict) -> None:
     body = msg.get("message", "")
     logging.info(f"ntfy message: priority={prio} title={title!r} message={body!r}")
     if prio >= 4:
-        logging.info("High priority detected; placing SIP call to line 0...")
-          await send_webhook(msg)
+        logging.info("High priority detected; sending webhook and placing SIP call...")
+        # Fire-and-forget webhook notification. Failures are logged but do not stop SIP call.
+        await send_webhook(msg)
         ami = AMIClient(AMI_HOST, AMI_PORT, AMI_USER, AMI_PASS)
         try:
             ami.connect()
